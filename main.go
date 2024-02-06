@@ -1,23 +1,21 @@
 package main
 
 import (
-	"fmt"
-	"github.com/AbrLis/Distributed-computing/orchestrator"
+	"github.com/AbrLis/Distributed-computing/agent"
+	"github.com/AbrLis/Distributed-computing/database"
+	apiEndpoint "github.com/AbrLis/Distributed-computing/orchestrator"
 )
 
 func main() {
-	expr := "22+22*4"
-	tokens, err := orchestrator.ParseExpression(expr)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
+	calculators := agent.NewFreeCalculators()
+	calculators.RunCalculators() // Запуск вычислительных операций
+	// TODO: Запуск демона RunDeamon(calculators)
 
-	for _, token := range tokens {
-		if token.IsOp {
-			fmt.Println("Operator:", token.Value)
-		} else {
-			fmt.Println("Operand:", token.Value)
-		}
+	db := database.NewDatabase()
+
+	orchestrator := apiEndpoint.NewOrchestrator(db)
+	err := orchestrator.Run("http://localhost", "3000")
+	if err != nil {
+		panic(err)
 	}
 }

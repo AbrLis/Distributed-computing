@@ -166,7 +166,7 @@ func (o *Orchestrator) ReceiveResultHandler(w http.ResponseWriter, r *http.Reque
 }
 
 // Run запускает сервер оркестратора
-func (o *Orchestrator) Run(port string) error {
+func (o *Orchestrator) Run(path string, port string) error {
 	http.HandleFunc(addExpressionPath, o.AddExpressionHandler)
 	http.HandleFunc(getExpressionsPath, o.GetExpressionsHandler)
 	http.HandleFunc(getValuePath, o.GetValueHandler)
@@ -174,5 +174,5 @@ func (o *Orchestrator) Run(port string) error {
 	http.HandleFunc(getTaskPath, o.GetTaskHandler)
 	http.HandleFunc(receiveResultPath, o.ReceiveResultHandler)
 
-	return http.ListenAndServe(":"+port, nil)
+	return http.ListenAndServe(path+":"+port, nil)
 }
