@@ -4,6 +4,7 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"github.com/AbrLis/Distributed-computing/agent"
 	"io"
 	"net/http"
 	"strings"
@@ -80,13 +81,6 @@ func (o *Orchestrator) GetExpressionsHandler(w http.ResponseWriter, r *http.Requ
 	tasks := o.db.GetAllTasks()
 
 	// Формируем список выражений со статусами
-	type ExpressionStatus struct {
-		ID         string `json:"id"`
-		Expression string `json:"expression"`
-		Status     string `json:"status"`
-		Result     string `json:"result,omitempty"`
-	}
-
 	expressions := make([]ExpressionStatus, 0)
 	for id, task := range tasks {
 		status := database.GetTaskStatus(task.Status)
@@ -104,7 +98,7 @@ func (o *Orchestrator) GetExpressionsHandler(w http.ResponseWriter, r *http.Requ
 	// Кодируем список выражений в JSON и отправляем клиенту
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(expressions); err != nil {
-		http.Error(w, "Ошибка при кодировании данных в JSON", http.StatusInternalServerError)
+		http.Error(w, "Ошибка при кодировании данных в JSON - выражений", http.StatusInternalServerError)
 		return
 	}
 }
@@ -143,7 +137,22 @@ func (o *Orchestrator) GetValueHandler(w http.ResponseWriter, r *http.Request) {
 
 // GetOperationsHandler обработчик для получения списка доступных операций со временем их выполнения
 func (o *Orchestrator) GetOperationsHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("В разработке: Список доступных операций: +, -, *, /"))
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	result := OpetatorTimeout{
+		Add:  agent.AddTimeout.String(),
+		Sub:  agent.SubtractTimeout.String(),
+		Mult: agent.MultiplyTimeout.String(),
+		Div:  agent.DivideTimeout.String(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, "Ошибка при кодировании данных в JSON - таймаутов", http.StatusInternalServerError)
+	}
 }
 
 // GetTaskHandler обработчик для получения задачи для выполнения
