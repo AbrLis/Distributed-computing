@@ -57,7 +57,7 @@ func (db *Database) GetTask(id string) (Task, bool) {
 }
 
 // SetTaskResult устанавливает результат выполнения задачи
-func (db *Database) SetTaskResult(id string, status TaskStatus, result string) {
+func (db *Database) SetTaskResult(id string, status TaskStatus, result string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -66,7 +66,9 @@ func (db *Database) SetTaskResult(id string, status TaskStatus, result string) {
 		task.Status = status
 		task.Result = result
 		db.tasks[id] = task
+		return nil
 	}
+	return fmt.Errorf("task with id %s not found", id)
 }
 
 // GetAllTasks возвращает все задачи в базе данных

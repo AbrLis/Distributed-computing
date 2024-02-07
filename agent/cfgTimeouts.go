@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/AbrLis/Distributed-computing/orchestrator"
 	"time"
 )
 
@@ -16,3 +17,5 @@ const (
 	CountCalculators      = 5                // Количество вычислителей в демоне
 	InactiveServerTimeout = 10 * time.Second // Таймаут после которого вычислитель будет считаться неактивным
 )
+
+var taskChannel chan []orchestrator.Token // Канал задач

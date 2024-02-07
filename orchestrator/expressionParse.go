@@ -6,11 +6,6 @@ import (
 	"unicode"
 )
 
-type Token struct {
-	Value string
-	IsOp  bool
-}
-
 // ParseExpression разбивает выражение на токены в польской нотации
 func ParseExpression(expr string) ([]Token, error) {
 	var tokens []Token

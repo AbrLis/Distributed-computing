@@ -14,7 +14,7 @@ func main() {
 	db := database.NewDatabase()
 
 	orchestrator := apiEndpoint.NewOrchestrator(db)
-	err := orchestrator.Run("http://localhost", "3000")
+	err := orchestrator.Run() // Запуск определён по адресу localhost:3000
 	if err != nil {
 		panic(err)
 	}

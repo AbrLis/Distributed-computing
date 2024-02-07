@@ -1,8 +1,16 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/json"
+	"log"
+	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/AbrLis/Distributed-computing/database"
+	"github.com/AbrLis/Distributed-computing/orchestrator"
 )
 
 var done chan struct{} // Канал завершения вычислительных операций
@@ -28,9 +36,15 @@ func (c *FreeCalculators) RunCalculators() {
 		go func(idCalc int) {
 			for {
 				select {
-				case token := <-taskChannel:
-					// TODO: выполнение вычислений
-					_ = token
+				case tokens := <-taskChannel:
+					result, flagError := c.calculateValue(idCalc, tokens)
+
+					c.sendResult(idCalc, flagError, result)
+
+					// Переход в режим ожидания
+					c.Count++
+					continue
+
 				case <-time.After(3 * time.Second): // Пингуемся записывая текущее время в PingTimeoutCalc
 					c.mu.Lock()
 					c.PingTimeoutCalc[idCalc] = time.Now()
@@ -42,6 +56,104 @@ func (c *FreeCalculators) RunCalculators() {
 			}
 		}(i)
 	}
+}
+
+// sendResult - Отправка результата на оркестратор
+func (c *FreeCalculators) sendResult(idCalc int, flagError bool, result float64) {
+	// Отправка результатов и переход в режим ожидания
+	textResult := "error parse or calculate"
+	status := database.StatusError
+	if !flagError {
+		textResult = strconv.FormatFloat(result, 'f', -1, 64)
+		status = database.StatusCompleted
+	}
+
+	sendresult := orchestrator.SendREsult{
+		IDCalc: idCalc,
+		Result: textResult,
+		Status: status,
+	}
+
+	// TODO: Безобразное игнорирование всех ошибок для простоты, иначе боюсь не успею.
+	jsonResult, _ := json.Marshal(sendresult)
+	req, _ := http.NewRequest(
+		"POST", orchestrator.HostPath+orchestrator.PortHost+orchestrator.ReceiveResultPath,
+		bytes.NewBuffer(jsonResult),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	resp, _ := client.Do(req)
+	if resp.StatusCode != 200 {
+		log.Printf("Не удалось отправить результат вычисления выражения в оркестратор id:%d\n", idCalc)
+	}
+}
+
+// calculateValue вычисляет значение выражения
+func (c *FreeCalculators) calculateValue(idCalc int, tokens []orchestrator.Token) (float64, bool) {
+	var result float64
+	flagError := false // Признак ошибки при выполнении операции
+	if len(tokens) == 0 {
+		flagError = true
+		log.Println("Очередь задач пустая, вычисление невозможно")
+		flagError = true
+	} else {
+		// Вычисление выражения
+		stack := make([]float64, 0)
+		for _, token := range tokens {
+			if !token.IsOp {
+				num, err := strconv.ParseFloat(token.Value, 64)
+				if err != nil {
+					log.Println("Ошибка при парсинге числа в вычислителе", err)
+					flagError = true
+					break
+				}
+				stack = append(stack, num)
+			} else {
+				if len(stack) < 2 {
+					log.Println("Для операции необходимо два числа в стеке, ошибка в вычислителе")
+					flagError = true
+					break
+				}
+				num1, num2 := stack[len(stack)-2], stack[len(stack)-1]
+				stack = stack[:len(stack)-2]
+
+				switch token.Value {
+				case "+":
+					stack = append(stack, num1+num2)
+					time.Sleep(AddTimeout)
+				case "-":
+					stack = append(stack, num1-num2)
+					time.Sleep(SubtractTimeout)
+				case "*":
+					stack = append(stack, num1*num2)
+					time.Sleep(MultiplyTimeout)
+				case "/":
+					if num2 == 0 {
+						log.Println("Деление на ноль")
+						flagError = true
+						break
+					}
+					stack = append(stack, num1/num2)
+					time.Sleep(DivideTimeout)
+				default:
+					log.Println("Неизвестная операция в вычислителе")
+					flagError = true
+					break
+				}
+
+				// После кажого вычисления отправка пинга что вычислитель жив
+				c.mu.Lock()
+				c.PingTimeoutCalc[idCalc] = time.Now()
+				c.mu.Unlock()
+			}
+		}
+		if len(stack) != 1 {
+			log.Println("Слишком много чисел в стеке, ошибка в вычислителе")
+			flagError = true
+		}
+		result = stack[0]
+	}
+	return result, flagError
 }
 
 // TODO: реализовать проверку на зависание задачи на основе пингов вычислителей

@@ -4,23 +4,30 @@ package orchestrator
 
 import (
 	"encoding/json"
-	"github.com/AbrLis/Distributed-computing/agent"
 	"io"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/AbrLis/Distributed-computing/agent"
 	"github.com/AbrLis/Distributed-computing/database"
 )
 
 // Orchestrator представляет сервер-оркестратор
 type Orchestrator struct {
-	db *database.Database
+	db             *database.Database
+	queue          [][]Token         // Очередь исполнения задач
+	queueInProcess map[int64][]Token // Задачи находящиеся на обработке
 }
 
 // NewOrchestrator создает новый экземпляр оркестратора
 func NewOrchestrator(db *database.Database) *Orchestrator {
 	return &Orchestrator{
-		db: db,
+		db:             db,
+		queue:          [][]Token{},
+		queueInProcess: map[int64][]Token{},
 	}
 }
 
@@ -64,8 +71,8 @@ func (o *Orchestrator) AddExpressionHandler(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Выражение добавлено в базу данных и принято к обработке. ID: " + id))
 
-	// TODO: отправить очередь токенов на вычисления
-	_ = tokens
+	// Добавление задачи в очередь
+	o.queue = append(o.queue, tokens)
 
 }
 
@@ -157,22 +164,76 @@ func (o *Orchestrator) GetOperationsHandler(w http.ResponseWriter, r *http.Reque
 
 // GetTaskHandler обработчик для получения задачи для выполнения
 func (o *Orchestrator) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO: Здесь необходимо добавить обработчик запроса на получение задачи
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if o.queue == nil || len(o.queue) == 0 {
+		http.Error(w, "Очередь задач пустая", http.StatusNotFound)
+		return
+	}
+
+	id := time.Now().UnixNano()
+	taskCalculate := TaskCalculate{
+		ID:         id,
+		Expression: o.queue[0],
+	}
+
+	// Отправка задачи демону распределителю
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(taskCalculate); err != nil {
+		errorsText := "Ошибка при кодировании данных в JSON - задачи"
+		http.Error(w, errorsText, http.StatusInternalServerError)
+		log.Println(errorsText)
+		return
+	}
+
+	// Перевод из очереди ожидания в очередь обработки
+	o.queueInProcess[id] = o.queue[0]
+	o.queue = o.queue[1:]
 }
 
 // ReceiveResultHandler обработчик для приема результата обработки данных
 func (o *Orchestrator) ReceiveResultHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO: Здесь необходимо добавить обработчик на прием результата обработки данных
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	result := &SendREsult{}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Не удалось прочитать тело запроса", http.StatusBadRequest)
+		return
+	}
+	err = json.Unmarshal(body, result)
+	if err != nil {
+		http.Error(w, "Не удалось распарсить тело запроса", http.StatusBadRequest)
+		return
+	}
+
+	// Запись результатов обработки в базу данных
+	err = o.db.SetTaskResult(strconv.Itoa(result.IDCalc), result.Status, result.Result)
+	if err != nil {
+		http.Error(w, "Ошибка при записи результатов в базу данных", http.StatusInternalServerError)
+		return
+	}
+
+	// Удаление задачи из очереди обработки
+	delete(o.queueInProcess, int64(result.IDCalc))
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // Run запускает сервер оркестратора
-func (o *Orchestrator) Run(path string, port string) error {
+func (o *Orchestrator) Run() error {
 	http.HandleFunc(addExpressionPath, o.AddExpressionHandler)
 	http.HandleFunc(getExpressionsPath, o.GetExpressionsHandler)
 	http.HandleFunc(getValuePath, o.GetValueHandler)
 	http.HandleFunc(getOperationsPath, o.GetOperationsHandler)
 	http.HandleFunc(getTaskPath, o.GetTaskHandler)
-	http.HandleFunc(receiveResultPath, o.ReceiveResultHandler)
+	http.HandleFunc(ReceiveResultPath, o.ReceiveResultHandler)
 
-	return http.ListenAndServe(path+":"+port, nil)
+	return http.ListenAndServe(HostPath+PortHost, nil)
 }
