@@ -33,13 +33,13 @@ func NewFreeCalculators() *FreeCalculators {
 // RunCalculators запускает вычислители ожидающие очередь задач
 func (c *FreeCalculators) RunCalculators() {
 	for i := 0; i < c.Count; i++ {
-		go func(idCalc int) {
+		go func(calcId int) {
 			for {
 				select {
 				case tokens := <-taskChannel:
-					result, flagError := c.calculateValue(idCalc, tokens)
+					result, flagError := c.calculateValue(tokens.ID, tokens.Expression)
 
-					c.sendResult(idCalc, flagError, result)
+					c.sendResult(tokens.ID, flagError, result)
 
 					// Переход в режим ожидания
 					c.Count++
@@ -47,7 +47,7 @@ func (c *FreeCalculators) RunCalculators() {
 
 				case <-time.After(3 * time.Second): // Пингуемся записывая текущее время в PingTimeoutCalc
 					c.mu.Lock()
-					c.PingTimeoutCalc[idCalc] = time.Now()
+					c.PingTimeoutCalc[calcId] = time.Now()
 					c.mu.Unlock()
 				case <-done:
 					// Завершение операций
@@ -59,7 +59,7 @@ func (c *FreeCalculators) RunCalculators() {
 }
 
 // sendResult - Отправка результата на оркестратор
-func (c *FreeCalculators) sendResult(idCalc int, flagError bool, result float64) {
+func (c *FreeCalculators) sendResult(idCalc int64, flagError bool, result float64) {
 	// Отправка результатов и переход в режим ожидания
 	textResult := "error parse or calculate"
 	status := database.StatusError
@@ -89,7 +89,7 @@ func (c *FreeCalculators) sendResult(idCalc int, flagError bool, result float64)
 }
 
 // calculateValue вычисляет значение выражения
-func (c *FreeCalculators) calculateValue(idCalc int, tokens []orchestrator.Token) (float64, bool) {
+func (c *FreeCalculators) calculateValue(idCalc int64, tokens []orchestrator.Token) (float64, bool) {
 	var result float64
 	flagError := false // Признак ошибки при выполнении операции
 	if len(tokens) == 0 {

@@ -7,10 +7,6 @@ import (
 )
 
 func main() {
-	calculators := agent.NewFreeCalculators()
-	calculators.RunCalculators() // Запуск вычислительных операций
-	// TODO: Запуск демона RunDeamon(calculators)
-
 	db := database.NewDatabase()
 
 	orchestrator := apiEndpoint.NewOrchestrator(db)
@@ -18,4 +14,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	calculators := agent.NewFreeCalculators()
+	calculators.RunCalculators() // Запуск вычислительных операций
+	agent.RunDeamon(calculators)
 }

@@ -214,7 +214,7 @@ func (o *Orchestrator) ReceiveResultHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Запись результатов обработки в базу данных
-	err = o.db.SetTaskResult(strconv.Itoa(result.IDCalc), result.Status, result.Result)
+	err = o.db.SetTaskResult(strconv.FormatInt(result.IDCalc, 10), result.Status, result.Result)
 	if err != nil {
 		http.Error(w, "Ошибка при записи результатов в базу данных", http.StatusInternalServerError)
 		return
@@ -232,7 +232,7 @@ func (o *Orchestrator) Run() error {
 	http.HandleFunc(getExpressionsPath, o.GetExpressionsHandler)
 	http.HandleFunc(getValuePath, o.GetValueHandler)
 	http.HandleFunc(getOperationsPath, o.GetOperationsHandler)
-	http.HandleFunc(getTaskPath, o.GetTaskHandler)
+	http.HandleFunc(GetTaskPath, o.GetTaskHandler)
 	http.HandleFunc(ReceiveResultPath, o.ReceiveResultHandler)
 
 	return http.ListenAndServe(HostPath+PortHost, nil)

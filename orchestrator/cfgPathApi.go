@@ -10,7 +10,7 @@ const (
 	getExpressionsPath = "/get-expressions"  // API для получения списка арифметических выражений
 	getValuePath       = "/get-value/"       // API для получения значения выражения по его идентификатору
 	getOperationsPath  = "/get-operations"   // API для получения списка доступных операций со временем их выполнения
-	getTaskPath        = "/get-task"         // API для получения задачи для выполнения
+	GetTaskPath        = "/get-task"         // API для получения задачи для выполнения
 	ReceiveResultPath  = "/receive-result"   // API для приема результата обработки данных
 	HostPath           = "http://localhost:" // Путь до хоста
 	PortHost           = ":3000"             // Порт хоста
@@ -32,8 +32,9 @@ type ExpressionStatus struct {
 	Result     string `json:"result,omitempty"`
 }
 
+// SendREsult - структура отправки результата оркестратору
 type SendREsult struct {
-	IDCalc int                 `json:"id"`
+	IDCalc int64               `json:"id"`
 	Result string              `json:"result"`
 	Status database.TaskStatus `json:"status"`
 }

@@ -18,4 +18,4 @@ const (
 	InactiveServerTimeout = 10 * time.Second // Таймаут после которого вычислитель будет считаться неактивным
 )
 
-var taskChannel chan []orchestrator.Token // Канал задач
+var taskChannel chan orchestrator.TaskCalculate // Канал задач
