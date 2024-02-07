@@ -172,7 +172,7 @@ func (o *Orchestrator) Run(path string, port string) error {
 	http.HandleFunc(getValuePath, o.GetValueHandler)
 	http.HandleFunc(getOperationsPath, o.GetOperationsHandler)
 	http.HandleFunc(getTaskPath, o.GetTaskHandler)
-	http.HandleFunc(receiveResultPath, o.ReceiveResultHandler)
+	http.HandleFunc(ReceiveResultPath, o.ReceiveResultHandler)
 
-	return http.ListenAndServe(path+":"+port, nil)
+	return http.ListenAndServe(HostPath+PortHost, nil)
 }
