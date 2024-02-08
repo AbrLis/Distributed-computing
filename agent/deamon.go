@@ -2,11 +2,12 @@ package agent
 
 import (
 	"encoding/json"
-	"github.com/AbrLis/Distributed-computing/orchestrator"
 	"io"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/AbrLis/Distributed-computing/orchestrator"
 )
 
 // RunDeamon запускает демона вычислителя ожидающего задачи
@@ -16,7 +17,7 @@ func RunDeamon(calculator *FreeCalculators) {
 		if calculator.Count > 0 {
 			// TODO: запросить задачу у оркестратора
 			req, err := http.NewRequest(
-				http.MethodGet, orchestrator.HostPath+orchestrator.PortHost+orchestrator.GetTaskPath, nil,
+				http.MethodGet, "http://"+orchestrator.HostPath+orchestrator.PortHost+orchestrator.GetTaskPath, nil,
 			)
 			if err != nil {
 				log.Println("Не удалось создать запрос в оркестратор")

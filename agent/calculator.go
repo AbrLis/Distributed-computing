@@ -13,7 +13,8 @@ import (
 	"github.com/AbrLis/Distributed-computing/orchestrator"
 )
 
-var done chan struct{} // Канал завершения вычислительных операций
+var done chan struct{}                          // Канал завершения вычислительных операций
+var taskChannel chan orchestrator.TaskCalculate // Канал задач
 
 // FreeCalculators - Структура счётчика свободных вычислителей
 type FreeCalculators struct {
@@ -25,8 +26,8 @@ type FreeCalculators struct {
 // NewFreeCalculators создает новый экземпляр структуры счётчика свободных вычислителей
 func NewFreeCalculators() *FreeCalculators {
 	return &FreeCalculators{
-		Count:           CountCalculators,
-		PingTimeoutCalc: make([]time.Time, CountCalculators),
+		Count:           orchestrator.CountCalculators,
+		PingTimeoutCalc: make([]time.Time, orchestrator.CountCalculators),
 	}
 }
 
@@ -120,13 +121,13 @@ func (c *FreeCalculators) calculateValue(idCalc int64, tokens []orchestrator.Tok
 				switch token.Value {
 				case "+":
 					stack = append(stack, num1+num2)
-					time.Sleep(AddTimeout)
+					time.Sleep(orchestrator.AddTimeout)
 				case "-":
 					stack = append(stack, num1-num2)
-					time.Sleep(SubtractTimeout)
+					time.Sleep(orchestrator.SubtractTimeout)
 				case "*":
 					stack = append(stack, num1*num2)
-					time.Sleep(MultiplyTimeout)
+					time.Sleep(orchestrator.MultiplyTimeout)
 				case "/":
 					if num2 == 0 {
 						log.Println("Деление на ноль")
@@ -134,7 +135,7 @@ func (c *FreeCalculators) calculateValue(idCalc int64, tokens []orchestrator.Tok
 						break
 					}
 					stack = append(stack, num1/num2)
-					time.Sleep(DivideTimeout)
+					time.Sleep(orchestrator.DivideTimeout)
 				default:
 					log.Println("Неизвестная операция в вычислителе")
 					flagError = true

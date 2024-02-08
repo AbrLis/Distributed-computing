@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AbrLis/Distributed-computing/agent"
 	"github.com/AbrLis/Distributed-computing/database"
 )
 
@@ -150,10 +149,10 @@ func (o *Orchestrator) GetOperationsHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	result := OpetatorTimeout{
-		Add:  agent.AddTimeout.String(),
-		Sub:  agent.SubtractTimeout.String(),
-		Mult: agent.MultiplyTimeout.String(),
-		Div:  agent.DivideTimeout.String(),
+		Add:  AddTimeout.String(),
+		Sub:  SubtractTimeout.String(),
+		Mult: MultiplyTimeout.String(),
+		Div:  DivideTimeout.String(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -235,5 +234,15 @@ func (o *Orchestrator) Run() error {
 	http.HandleFunc(GetTaskPath, o.GetTaskHandler)
 	http.HandleFunc(ReceiveResultPath, o.ReceiveResultHandler)
 
-	return http.ListenAndServe(HostPath+PortHost, nil)
+	errCh := make(chan error)
+	go func() {
+		errCh <- http.ListenAndServe(HostPath+PortHost, nil)
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-time.After(2 * time.Second):
+		return nil
+	}
 }
