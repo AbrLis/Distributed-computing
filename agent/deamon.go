@@ -54,7 +54,7 @@ func RunDeamon(calculator *FreeCalculators) {
 
 			// Задача получена, отправка свободным вычислителям
 			calculator.Count--
-			taskChannel <- tokens
+			calculator.taskChannel <- tokens
 
 		} else {
 			// Ждать пока не появятся свободные вычислители

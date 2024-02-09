@@ -35,7 +35,7 @@ type ExpressionStatus struct {
 
 // SendREsult - структура отправки результата оркестратору
 type SendREsult struct {
-	IDCalc int64               `json:"id"`
+	IDCalc string              `json:"id"`
 	Result string              `json:"result"`
 	Status database.TaskStatus `json:"status"`
 }
@@ -48,7 +48,7 @@ type Token struct {
 
 // TaskCalculate - структура для формирования задачи
 type TaskCalculate struct {
-	ID         int64   `json:"id"`
+	ID         string  `json:"id"`
 	Expression []Token `json:"expression"`
 }
 

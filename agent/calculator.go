@@ -13,13 +13,14 @@ import (
 	"github.com/AbrLis/Distributed-computing/orchestrator"
 )
 
-var done chan struct{}                          // Канал завершения вычислительных операций
-var taskChannel chan orchestrator.TaskCalculate // Канал задач
+var done chan struct{} // Канал завершения вычислительных операций
+//var taskChannel chan orchestrator.TaskCalculate // Канал задач
 
 // FreeCalculators - Структура счётчика свободных вычислителей
 type FreeCalculators struct {
-	Count           int         // Свободные вычислители
-	PingTimeoutCalc []time.Time // Таймауты пингов вычислителей
+	Count           int                             // Свободные вычислители
+	PingTimeoutCalc []time.Time                     // Таймауты пингов вычислителей
+	taskChannel     chan orchestrator.TaskCalculate // Канал задач
 	mu              sync.Mutex
 }
 
@@ -28,6 +29,7 @@ func NewFreeCalculators() *FreeCalculators {
 	return &FreeCalculators{
 		Count:           orchestrator.CountCalculators,
 		PingTimeoutCalc: make([]time.Time, orchestrator.CountCalculators),
+		taskChannel:     make(chan orchestrator.TaskCalculate),
 	}
 }
 
@@ -37,8 +39,9 @@ func (c *FreeCalculators) RunCalculators() {
 		go func(calcId int) {
 			for {
 				select {
-				case tokens := <-taskChannel:
-					result, flagError := c.calculateValue(tokens.ID, tokens.Expression)
+				case tokens := <-c.taskChannel:
+					log.Println("Вычислитель получил задачу: ", tokens.ID)
+					result, flagError := c.calculateValue(calcId, tokens.Expression)
 
 					c.sendResult(tokens.ID, flagError, result)
 
@@ -47,11 +50,13 @@ func (c *FreeCalculators) RunCalculators() {
 					continue
 
 				case <-time.After(3 * time.Second): // Пингуемся записывая текущее время в PingTimeoutCalc
+					log.Println("Вычислитель пингуется: ", calcId)
 					c.mu.Lock()
 					c.PingTimeoutCalc[calcId] = time.Now()
 					c.mu.Unlock()
 				case <-done:
 					// Завершение операций
+					log.Println("Вычислитель завершил работу: ", calcId)
 					return
 				}
 			}
@@ -60,7 +65,7 @@ func (c *FreeCalculators) RunCalculators() {
 }
 
 // sendResult - Отправка результата на оркестратор
-func (c *FreeCalculators) sendResult(idCalc int64, flagError bool, result float64) {
+func (c *FreeCalculators) sendResult(idCalc string, flagError bool, result float64) {
 	// Отправка результатов и переход в режим ожидания
 	textResult := "error parse or calculate"
 	status := database.StatusError
@@ -78,19 +83,19 @@ func (c *FreeCalculators) sendResult(idCalc int64, flagError bool, result float6
 	// TODO: Безобразное игнорирование всех ошибок для простоты, иначе боюсь не успею.
 	jsonResult, _ := json.Marshal(sendresult)
 	req, _ := http.NewRequest(
-		"POST", orchestrator.HostPath+orchestrator.PortHost+orchestrator.ReceiveResultPath,
+		"POST",
+		"http://"+orchestrator.HostPath+orchestrator.PortHost+orchestrator.ReceiveResultPath,
 		bytes.NewBuffer(jsonResult),
 	)
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, _ := client.Do(req)
+	resp, _ := http.DefaultClient.Do(req)
 	if resp.StatusCode != 200 {
 		log.Printf("Не удалось отправить результат вычисления выражения в оркестратор id:%d\n", idCalc)
 	}
 }
 
 // calculateValue вычисляет значение выражения
-func (c *FreeCalculators) calculateValue(idCalc int64, tokens []orchestrator.Token) (float64, bool) {
+func (c *FreeCalculators) calculateValue(idCalc int, tokens []orchestrator.Token) (float64, bool) {
 	var result float64
 	flagError := false // Признак ошибки при выполнении операции
 	if len(tokens) == 0 {

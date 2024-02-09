@@ -1,5 +1,3 @@
-// В файле orchestrator.go
-
 package orchestrator
 
 import (
@@ -7,7 +5,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,16 +14,16 @@ import (
 // Orchestrator представляет сервер-оркестратор
 type Orchestrator struct {
 	db             *database.Database
-	queue          [][]Token         // Очередь исполнения задач
-	queueInProcess map[int64][]Token // Задачи находящиеся на обработке
+	queue          []TaskCalculate          // Очередь исполнения задач
+	queueInProcess map[string]TaskCalculate // Задачи находящиеся на обработке
 }
 
 // NewOrchestrator создает новый экземпляр оркестратора
 func NewOrchestrator(db *database.Database) *Orchestrator {
 	return &Orchestrator{
 		db:             db,
-		queue:          [][]Token{},
-		queueInProcess: map[int64][]Token{},
+		queue:          []TaskCalculate{},
+		queueInProcess: map[string]TaskCalculate{},
 	}
 }
 
@@ -71,7 +68,7 @@ func (o *Orchestrator) AddExpressionHandler(w http.ResponseWriter, r *http.Reque
 	w.Write([]byte("Выражение добавлено в базу данных и принято к обработке. ID: " + id))
 
 	// Добавление задачи в очередь
-	o.queue = append(o.queue, tokens)
+	o.queue = append(o.queue, TaskCalculate{ID: id, Expression: tokens})
 
 }
 
@@ -173,10 +170,10 @@ func (o *Orchestrator) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := time.Now().UnixNano()
+	task := o.queue[0]
 	taskCalculate := TaskCalculate{
-		ID:         id,
-		Expression: o.queue[0],
+		ID:         task.ID,
+		Expression: task.Expression,
 	}
 
 	// Отправка задачи демону распределителю
@@ -189,7 +186,7 @@ func (o *Orchestrator) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Перевод из очереди ожидания в очередь обработки
-	o.queueInProcess[id] = o.queue[0]
+	o.queueInProcess[task.ID] = task
 	o.queue = o.queue[1:]
 }
 
@@ -213,14 +210,14 @@ func (o *Orchestrator) ReceiveResultHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Запись результатов обработки в базу данных
-	err = o.db.SetTaskResult(strconv.FormatInt(result.IDCalc, 10), result.Status, result.Result)
+	err = o.db.SetTaskResult(result.IDCalc, result.Status, result.Result)
 	if err != nil {
 		http.Error(w, "Ошибка при записи результатов в базу данных", http.StatusInternalServerError)
 		return
 	}
 
 	// Удаление задачи из очереди обработки
-	delete(o.queueInProcess, int64(result.IDCalc))
+	delete(o.queueInProcess, result.IDCalc)
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -243,6 +240,7 @@ func (o *Orchestrator) Run() error {
 	case err := <-errCh:
 		return err
 	case <-time.After(2 * time.Second):
+		close(errCh)
 		return nil
 	}
 }
