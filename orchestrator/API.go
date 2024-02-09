@@ -124,17 +124,19 @@ func (o *Orchestrator) GetValueHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Проверяем статус задачи
-	switch task.Status {
-	case database.StatusInProgress:
-		http.Error(w, "Задача находится в процессе выполнения", http.StatusConflict)
+	// Формирование результата вычисления выражения
+	expression := ExpressionStatus{
+		ID:         id,
+		Expression: task.Expression,
+		Status:     database.GetTaskStatus(task.Status),
+		Result:     task.Result,
+	}
+
+	// Кодируем список выражений в JSON и отправляем клиенту
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(expression); err != nil {
+		http.Error(w, "Ошибка при кодировании данных в JSON - выражения", http.StatusInternalServerError)
 		return
-	case database.StatusCompleted:
-		// Отправляем результат вычисления выражения
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Результат вычисления выражения: " + task.Result))
-	default:
-		http.Error(w, "Задача находится в невалидном статусе", http.StatusInternalServerError)
 	}
 }
 

@@ -44,6 +44,7 @@ func (c *FreeCalculators) RunCalculators() {
 					result, flagError := c.calculateValue(calcId, tokens.Expression)
 
 					c.sendResult(tokens.ID, flagError, result)
+					log.Println("Вычислитель отправил результат: ", tokens.ID)
 
 					// Переход в режим ожидания
 					c.Count++

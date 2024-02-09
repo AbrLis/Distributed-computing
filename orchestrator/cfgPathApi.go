@@ -19,10 +19,10 @@ const (
 
 // OpetatorTimeout - структура для формирования списка доступных операций со временем их выполнения
 type OpetatorTimeout struct {
-	Add  string `json:"+"`
-	Sub  string `json:"-"`
-	Mult string `json:"*"`
-	Div  string `json:"/"`
+	Add  string `json:"add"`
+	Sub  string `json:"sub"`
+	Mult string `json:"mult"`
+	Div  string `json:"div"`
 }
 
 // ExpressionStatus - структура для формирования статуса выражения
