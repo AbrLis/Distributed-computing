@@ -73,10 +73,7 @@ go run main.go
 - API для добавления выражений 
 `POST запрос`
 ```shell
-curl -X POST \
-  -H "Content-Type: text/plain" \
-  -d "2+2*2" \
-  http://localhost:3000/add-expression 
+curl -X POST -H "Content-Type: text/plain" -d "2+2*2" http://localhost:3000/add-expression
 ```
 Принимается текстовое выражение в формате математического выражения.
 
