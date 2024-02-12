@@ -1,36 +1,60 @@
 package agent
 
 import (
-	"bytes"
-	"encoding/json"
 	"log"
-	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/AbrLis/Distributed-computing/database"
-	"github.com/AbrLis/Distributed-computing/orchestrator"
 )
 
 var done chan struct{} // Канал завершения вычислительных операций
-//var taskChannel chan orchestrator.TaskCalculate // Канал задач
+
+// Token - структура для формирования польской нотации выражения
+type Token struct {
+	Value string
+	IsOp  bool
+}
+
+// TaskCalculate - структура для формирования задачи
+type TaskCalculate struct {
+	ID         string  `json:"id"`
+	Expression []Token `json:"expression"`
+}
 
 // FreeCalculators - Структура счётчика свободных вычислителей
 type FreeCalculators struct {
-	Count           int                             // Свободные вычислители
-	PingTimeoutCalc []time.Time                     // Таймауты пингов вычислителей
-	taskChannel     chan orchestrator.TaskCalculate // Канал задач
+	db              *database.Database       // Ссылка на бд
+	Count           int                      // Количество вычислителей
+	CountFree       int                      // Свободные вычислители
+	PingTimeoutCalc []time.Time              // Таймауты пингов вычислителей
+	Queue           []TaskCalculate          // Очередь исполнения задач
+	queueInProcess  map[string]TaskCalculate // Задачи находящиеся на обработке
+	taskChannel     chan TaskCalculate       // Канал задач
+	AddTimeout      time.Duration            // Таймауты операций
+	SubtractTimeout time.Duration
+	MultiplyTimeout time.Duration
+	DivideTimeout   time.Duration
 	mu              sync.Mutex
 }
 
 // NewFreeCalculators создает новый экземпляр структуры счётчика свободных вычислителей
-func NewFreeCalculators() *FreeCalculators {
-	return &FreeCalculators{
-		Count:           orchestrator.CountCalculators,
-		PingTimeoutCalc: make([]time.Time, orchestrator.CountCalculators),
-		taskChannel:     make(chan orchestrator.TaskCalculate),
+func NewFreeCalculators(db *database.Database) *FreeCalculators {
+	freeCaclulatros := &FreeCalculators{
+		db:              db,
+		Count:           5,
+		CountFree:       5,
+		Queue:           []TaskCalculate{},
+		queueInProcess:  map[string]TaskCalculate{},
+		AddTimeout:      5 * time.Second,
+		SubtractTimeout: 3 * time.Second,
+		MultiplyTimeout: 4 * time.Second,
+		DivideTimeout:   6 * time.Second,
 	}
+	freeCaclulatros.PingTimeoutCalc = make([]time.Time, freeCaclulatros.Count)
+
+	return freeCaclulatros
 }
 
 // RunCalculators запускает вычислители ожидающие очередь задач
@@ -44,7 +68,7 @@ func (c *FreeCalculators) RunCalculators() {
 					result, flagError := c.calculateValue(calcId, tokens.Expression)
 
 					c.sendResult(tokens.ID, flagError, result)
-					log.Println("Вычислитель отправил результат: ", tokens.ID)
+					log.Println("Вычислитель отправил результат в бд: ", tokens.ID)
 
 					// Переход в режим ожидания
 					c.Count++
@@ -75,28 +99,22 @@ func (c *FreeCalculators) sendResult(idCalc string, flagError bool, result float
 		status = database.StatusCompleted
 	}
 
-	sendresult := orchestrator.SendREsult{
-		IDCalc: idCalc,
-		Result: textResult,
-		Status: status,
+	// Запись результатов обработки в базу данных
+	err := c.db.SetTaskResult(idCalc, status, textResult)
+	if err != nil {
+		log.Printf("Ошибка записи результата в базу данных: %s\n", err)
+		c.mu.Lock()
+		c.Queue = append(c.Queue, c.queueInProcess[idCalc])
+		c.mu.Unlock()
+		log.Println("Ошибочная операция перенесена в конец очереди...")
 	}
 
-	// TODO: Безобразное игнорирование всех ошибок для простоты, иначе боюсь не успею.
-	jsonResult, _ := json.Marshal(sendresult)
-	req, _ := http.NewRequest(
-		"POST",
-		"http://"+orchestrator.HostPath+orchestrator.PortHost+orchestrator.ReceiveResultPath,
-		bytes.NewBuffer(jsonResult),
-	)
-	req.Header.Set("Content-Type", "application/json")
-	resp, _ := http.DefaultClient.Do(req)
-	if resp.StatusCode != 200 {
-		log.Printf("Не удалось отправить результат вычисления выражения в оркестратор id:%d\n", idCalc)
-	}
+	// Удаление задачи из очереди обработки
+	delete(c.queueInProcess, idCalc)
 }
 
 // calculateValue вычисляет значение выражения
-func (c *FreeCalculators) calculateValue(idCalc int, tokens []orchestrator.Token) (float64, bool) {
+func (c *FreeCalculators) calculateValue(idCalc int, tokens []Token) (float64, bool) {
 	var result float64
 	flagError := false // Признак ошибки при выполнении операции
 	if len(tokens) == 0 {
@@ -127,13 +145,13 @@ func (c *FreeCalculators) calculateValue(idCalc int, tokens []orchestrator.Token
 				switch token.Value {
 				case "+":
 					stack = append(stack, num1+num2)
-					time.Sleep(orchestrator.AddTimeout)
+					time.Sleep(c.AddTimeout)
 				case "-":
 					stack = append(stack, num1-num2)
-					time.Sleep(orchestrator.SubtractTimeout)
+					time.Sleep(c.SubtractTimeout)
 				case "*":
 					stack = append(stack, num1*num2)
-					time.Sleep(orchestrator.MultiplyTimeout)
+					time.Sleep(c.MultiplyTimeout)
 				case "/":
 					if num2 == 0 {
 						log.Println("Деление на ноль")
@@ -141,7 +159,7 @@ func (c *FreeCalculators) calculateValue(idCalc int, tokens []orchestrator.Token
 						break
 					}
 					stack = append(stack, num1/num2)
-					time.Sleep(orchestrator.DivideTimeout)
+					time.Sleep(c.DivideTimeout)
 				default:
 					log.Println("Неизвестная операция в вычислителе")
 					flagError = true

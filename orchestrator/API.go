@@ -3,27 +3,25 @@ package orchestrator
 import (
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/AbrLis/Distributed-computing/agent"
 	"github.com/AbrLis/Distributed-computing/database"
 )
 
 // Orchestrator представляет сервер-оркестратор
 type Orchestrator struct {
-	db             *database.Database
-	queue          []TaskCalculate          // Очередь исполнения задач
-	queueInProcess map[string]TaskCalculate // Задачи находящиеся на обработке
+	db         *database.Database
+	calculator *agent.FreeCalculators
 }
 
 // NewOrchestrator создает новый экземпляр оркестратора
-func NewOrchestrator(db *database.Database) *Orchestrator {
+func NewOrchestrator(db *database.Database, calc *agent.FreeCalculators) *Orchestrator {
 	return &Orchestrator{
-		db:             db,
-		queue:          []TaskCalculate{},
-		queueInProcess: map[string]TaskCalculate{},
+		db:         db,
+		calculator: calc,
 	}
 }
 
@@ -68,7 +66,7 @@ func (o *Orchestrator) AddExpressionHandler(w http.ResponseWriter, r *http.Reque
 	w.Write([]byte("Выражение добавлено в базу данных и принято к обработке. ID: " + id))
 
 	// Добавление задачи в очередь
-	o.queue = append(o.queue, TaskCalculate{ID: id, Expression: tokens})
+	o.calculator.Queue = append(o.calculator.Queue, agent.TaskCalculate{ID: id, Expression: tokens})
 
 }
 
@@ -148,10 +146,10 @@ func (o *Orchestrator) GetOperationsHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	result := OpetatorTimeout{
-		Add:  AddTimeout.String(),
-		Sub:  SubtractTimeout.String(),
-		Mult: MultiplyTimeout.String(),
-		Div:  DivideTimeout.String(),
+		Add:  o.calculator.AddTimeout.String(),
+		Sub:  o.calculator.SubtractTimeout.String(),
+		Mult: o.calculator.MultiplyTimeout.String(),
+		Div:  o.calculator.DivideTimeout.String(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -160,78 +158,12 @@ func (o *Orchestrator) GetOperationsHandler(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// GetTaskHandler обработчик для получения задачи для выполнения
-func (o *Orchestrator) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if o.queue == nil || len(o.queue) == 0 {
-		http.Error(w, "Очередь задач пустая", http.StatusNotFound)
-		return
-	}
-
-	task := o.queue[0]
-	taskCalculate := TaskCalculate{
-		ID:         task.ID,
-		Expression: task.Expression,
-	}
-
-	// Отправка задачи демону распределителю
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(taskCalculate); err != nil {
-		errorsText := "Ошибка при кодировании данных в JSON - задачи"
-		http.Error(w, errorsText, http.StatusInternalServerError)
-		log.Println(errorsText)
-		return
-	}
-
-	// Перевод из очереди ожидания в очередь обработки
-	o.queueInProcess[task.ID] = task
-	o.queue = o.queue[1:]
-}
-
-// ReceiveResultHandler обработчик для приема результата обработки данных
-func (o *Orchestrator) ReceiveResultHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	result := &SendREsult{}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Не удалось прочитать тело запроса", http.StatusBadRequest)
-		return
-	}
-	err = json.Unmarshal(body, result)
-	if err != nil {
-		http.Error(w, "Не удалось распарсить тело запроса", http.StatusBadRequest)
-		return
-	}
-
-	// Запись результатов обработки в базу данных
-	err = o.db.SetTaskResult(result.IDCalc, result.Status, result.Result)
-	if err != nil {
-		http.Error(w, "Ошибка при записи результатов в базу данных", http.StatusInternalServerError)
-		return
-	}
-
-	// Удаление задачи из очереди обработки
-	delete(o.queueInProcess, result.IDCalc)
-
-	w.WriteHeader(http.StatusOK)
-}
-
 // Run запускает сервер оркестратора
 func (o *Orchestrator) Run() error {
 	http.HandleFunc(addExpressionPath, o.AddExpressionHandler)
 	http.HandleFunc(getExpressionsPath, o.GetExpressionsHandler)
 	http.HandleFunc(getValuePath, o.GetValueHandler)
 	http.HandleFunc(getOperationsPath, o.GetOperationsHandler)
-	http.HandleFunc(GetTaskPath, o.GetTaskHandler)
-	http.HandleFunc(ReceiveResultPath, o.ReceiveResultHandler)
 
 	errCh := make(chan error)
 	go func() {

@@ -10,8 +10,9 @@ import (
 
 func main() {
 	db := database.NewDatabase()
+	calculators := agent.NewFreeCalculators(db)
 
-	orchestrator := apiEndpoint.NewOrchestrator(db)
+	orchestrator := apiEndpoint.NewOrchestrator(db, calculators)
 
 	// Запуск API-оркестратора
 	log.Println("Попытка запуска API-оркестратора")
@@ -22,7 +23,6 @@ func main() {
 	}
 	log.Printf("API-оркестратор запущен по адресу http://%s:%s\n", apiEndpoint.HostPath, apiEndpoint.PortHost)
 
-	calculators := agent.NewFreeCalculators()
 	calculators.RunCalculators() // Запуск вычислительных операций
 	log.Println("Вычислители запущены")
 	agent.RunDeamon(calculators) // Запуск демона вычислителя
