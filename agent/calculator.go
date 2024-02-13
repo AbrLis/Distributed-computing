@@ -47,10 +47,12 @@ func NewFreeCalculators(db *database.Database) *FreeCalculators {
 		CountFree:       5,
 		Queue:           []TaskCalculate{},
 		queueInProcess:  map[string]TaskCalculate{},
+		taskChannel:     make(chan TaskCalculate),
 		AddTimeout:      5 * time.Second,
 		SubtractTimeout: 3 * time.Second,
 		MultiplyTimeout: 4 * time.Second,
 		DivideTimeout:   6 * time.Second,
+		mu:              sync.Mutex{},
 	}
 	freeCaclulatros.PingTimeoutCalc = make([]time.Time, freeCaclulatros.Count)
 
@@ -64,14 +66,14 @@ func (c *FreeCalculators) RunCalculators() {
 			for {
 				select {
 				case tokens := <-c.taskChannel:
-					log.Println("Вычислитель получил задачу: ", tokens.ID)
+					log.Printf("Вычислитель %d - получил задачу: %s\n", calcId, tokens.ID)
 					result, flagError := c.calculateValue(calcId, tokens.Expression)
 
 					c.sendResult(tokens.ID, flagError, result)
 					log.Println("Вычислитель отправил результат в бд: ", tokens.ID)
 
 					// Переход в режим ожидания
-					c.Count++
+					c.CountFree++
 					continue
 
 				case <-time.After(3 * time.Second): // Пингуемся записывая текущее время в PingTimeoutCalc

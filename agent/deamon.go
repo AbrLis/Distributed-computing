@@ -8,7 +8,7 @@ import (
 // RunDeamon запускает демона вычислителя ожидающего задачи
 func RunDeamon(calculator *FreeCalculators) {
 	for {
-		if calculator.Count > 0 {
+		if calculator.CountFree > 0 {
 			calculator.mu.Lock()
 			if len(calculator.Queue) == 0 {
 				calculator.mu.Unlock()
@@ -18,12 +18,13 @@ func RunDeamon(calculator *FreeCalculators) {
 			}
 
 			// Отправка задачи свободным вычислителям
-			calculator.Count--
-			calculator.taskChannel <- calculator.Queue[0]
+			calculator.CountFree--
+			task := calculator.Queue[0]
 			// Перевод из очереди ожидания в очередь обработки
 			calculator.queueInProcess[calculator.Queue[0].ID] = calculator.Queue[0]
-			calculator.Queue = calculator.Queue[:1]
+			calculator.Queue = calculator.Queue[1:]
 			calculator.mu.Unlock()
+			calculator.taskChannel <- task
 		} else {
 			// Ждать пока не появятся свободные вычислители
 			log.Println("Нет свободных вычислителей, ожидание...")
