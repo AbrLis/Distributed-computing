@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -158,12 +159,33 @@ func (o *Orchestrator) GetOperationsHandler(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// MonitoringHandler обработчик для получения статуса вычислителей
+func (o *Orchestrator) MonitoringHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	pingTimeout := make(map[int]string)
+	for i, value := range o.calculator.PingTimeoutCalc {
+		pingTimeout[i+1] = fmt.Sprintf("%.3f", time.Now().Sub(value).Seconds()) + " sec"
+	}
+
+	jsonData, err := json.Marshal(pingTimeout)
+	if err != nil {
+		http.Error(w, "Ошибка при кодировании данных в JSON - статуса вычислителя", http.StatusInternalServerError)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonData)
+}
+
 // Run запускает сервер оркестратора
 func (o *Orchestrator) Run() error {
 	http.HandleFunc(addExpressionPath, o.AddExpressionHandler)
 	http.HandleFunc(getExpressionsPath, o.GetExpressionsHandler)
 	http.HandleFunc(getValuePath, o.GetValueHandler)
 	http.HandleFunc(getOperationsPath, o.GetOperationsHandler)
+	http.HandleFunc(monitoring, o.MonitoringHandler)
 
 	errCh := make(chan error)
 	go func() {
