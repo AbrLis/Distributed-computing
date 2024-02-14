@@ -2,31 +2,8 @@ package database
 
 import (
 	"fmt"
-	"sync"
 	"time"
 )
-
-// TaskStatus представляет статус выполнения задачи
-type TaskStatus int
-
-const (
-	StatusInProgress TaskStatus = iota
-	StatusCompleted
-	StatusError
-)
-
-// Task представляет структуру задачи в базе данных
-type Task struct {
-	Expression string
-	Status     TaskStatus
-	Result     string
-}
-
-// Database представляет базу данных задач
-type Database struct {
-	tasks map[string]Task
-	mu    sync.Mutex
-}
 
 // NewDatabase создает новую базу данных
 func NewDatabase() *Database {
